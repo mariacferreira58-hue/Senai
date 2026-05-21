@@ -1,51 +1,64 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Senai.Data;
+﻿using Senai.Data;
 using Senai.Models;
+using Microsoft.AspNetCore.Mvc;
 namespace Senai.Controllers
-
 {
+
     [ApiController]
     [Route("[controller]")]
     public class TarefaController : ControllerBase
     {
+
         private readonly GerenciaContext _context;
+
         public TarefaController(GerenciaContext context)
         {
             _context = context;
         }
 
-        [HttpGet("{id}")]
-        public IActionResult RetornaReserva(int id)
+        [HttpGet("tarefasUsuario")]
+        public IActionResult TarefasUsuario()
         {
-            var reservas = _context.Tarefas.Find(id);
-            if (reservas == null)
+            var tarefaLogado = HttpContext.Session.GetString("IdLogado");
+            if (tarefaLogado == null)
             {
-                return NotFound("Reserva não encontrada");
+                return Unauthorized("Faça login antes!");
             }
-            return Ok(reservas);
+            var idUsuarioLogado = Request.Cookies["IdLogado"];
+
+            if (idUsuarioLogado != null)
+            {
+                Console.WriteLine("TESTE: " + int.Parse(idUsuarioLogado));
+                var resultado = from c in _context.Usuarios
+                                join r in _context.Tarefas
+                                on c.Id equals r.IdUsuario
+                                where c.Id == int.Parse(idUsuarioLogado)
+                                select new
+                                {
+                                    Usuario = c.Nome,
+                                    c.Email,
+                                    Tarefas = r.Id,
+                                    r.Descricao,
+                                    r.Status
+                                };
+                return Ok(resultado.ToList());
+            }
+            return Unauthorized("Faça login antes!");
         }
 
-        [HttpGet("tarefasUsuario/{id}")]
-        public IActionResult TarefasUsuario(int identUsuario)
-        {
-            var resultado = from c in _context.Usuarios
-                            join t in _context.Tarefas
-                            on c.Id equals t.Id
-                            where identUsuario == c.Id
-                            select new
-                            {
-                                Usuario = c.Nome,
-                                c.Email,
-                                c.Senha,
-                                Tarefas = t.Descricao,
-                                t.Status,
-                            };
-            return Ok(resultado.ToList());
-        }
 
         [HttpPost]
-        public IActionResult CadastraReserva(Tarefa tarefa)
+        public IActionResult CadastraTarefa(Tarefa tarefa)
         {
+            var tarefaLogado = HttpContext.Session.GetString("IdLogado");
+            if (tarefaLogado == null)
+            {
+                return Unauthorized("Faça login antes!");
+            }
+            var idTarefaLogado = Request.Cookies["IdLogado"];
+            if (idTarefaLogado != null)
+                tarefa.IdUsuario = int.Parse(idTarefaLogado);
+
             _context.Add(tarefa);
             _context.SaveChanges();
             return Created("", tarefa);
@@ -54,16 +67,40 @@ namespace Senai.Controllers
         [HttpPut("{id}")]
         public IActionResult AtualizaTarefa(int id, Tarefa tarefa)
         {
-            var reservaDoBanco = _context.Tarefas.Find(id);
-            if (reservaDoBanco == null)
+            var usuarioLogado = HttpContext.Session.GetString("IdLogado");
+            if (usuarioLogado == null)
             {
-                return NotFound("Reserva não existe no banco!");
+                return Unauthorized("Faça login antes!");
             }
-            reservaDoBanco.Descricao = tarefa.Descricao;
-            reservaDoBanco.Status = tarefa.Status;
-            reservaDoBanco.Id = tarefa.Id;
+
+            var tarefaDoBanco = _context.Tarefas.Find(id);
+            if (tarefaDoBanco == null)
+            {
+                return NotFound("Tarefa não existe no banco!");
+            }
+            tarefaDoBanco.Descricao = tarefa.Descricao;
+            tarefaDoBanco.Status = tarefa.Status;
+           
             _context.SaveChanges();
             return Ok("Atualizado");
+        }
+        
+        [HttpDelete("{id}")]
+        public IActionResult DeletaTarefa(int id)
+        {
+            var tarefaLogado = HttpContext.Session.GetString("IdLogado");
+            if (tarefaLogado == null)
+            {
+                return Unauthorized("Faça login antes!");
+            }
+            var tarefaDoBanco = _context.Tarefas.Find(id);
+            if (tarefaDoBanco == null)
+            {
+                return NotFound("Não encontrado!");
+            }
+            _context.Remove(tarefaDoBanco);
+            _context.SaveChanges();
+            return Ok("Deletado");
         }
     }
 }
